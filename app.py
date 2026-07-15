@@ -1,6 +1,8 @@
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
+from src.charts import get_histogram_data, get_numeric_columns
 from src.profiling import (
     get_column_types,
     get_duplicate_count,
@@ -45,6 +47,25 @@ if uploaded_file is not None:
 
         st.subheader("Duplicate rows")
         st.write(get_duplicate_count(df))
+
+        st.subheader("Chart")
+        numeric_columns = get_numeric_columns(df)
+
+        if not numeric_columns:
+            st.info("No numeric columns available to chart.")
+        else:
+            selected_column = st.selectbox("Choose a numeric column", numeric_columns)
+            values = get_histogram_data(df, selected_column)
+
+            if values.empty:
+                st.info(f"No non-missing numeric values in '{selected_column}' to chart.")
+            else:
+                fig, ax = plt.subplots()
+                ax.hist(values)
+                ax.set_xlabel(selected_column)
+                ax.set_ylabel("Frequency")
+                st.pyplot(fig)
+                plt.close(fig)
 else:
     st.info("👆 Upload a CSV file to see a preview and profiling summary.")
 
