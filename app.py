@@ -10,15 +10,40 @@ from src.profiling import (
     get_shape,
 )
 
+
+def render_quality_banner(count: int, issue_text: str, clean_text: str) -> None:
+    if count > 0:
+        st.warning(f"⚠️ Found {issue_text}.")
+    else:
+        st.success(f"✅ {clean_text}")
+
+
 st.set_page_config(page_title="InsightLite", page_icon="📊", layout="centered")
 
+with st.sidebar:
+    st.header("About InsightLite")
+    st.markdown(
+        "InsightLite helps you quickly understand a new dataset before diving into "
+        "analysis — load your data, review its quality, and explore key insights."
+    )
+    st.markdown(
+        "**How it works**\n"
+        "1. Load data\n"
+        "2. Review quality\n"
+        "3. Explore insights"
+    )
+
 st.title("📊 InsightLite")
-st.write("A lightweight data profiling assistant for data scientists.")
+st.caption("A lightweight data profiling assistant for data scientists.")
 
 st.divider()
 
 st.subheader("Upload your dataset")
-uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+uploaded_file = st.file_uploader(
+    "Choose a CSV file",
+    type="csv",
+    help="Upload a CSV (comma-separated values) file to preview and profile it.",
+)
 
 if uploaded_file is not None:
     try:
@@ -27,34 +52,67 @@ if uploaded_file is not None:
         st.error("This file appears to be empty or not a valid CSV.")
     else:
         st.subheader("Preview")
+        st.caption("Showing the first 5 rows of your uploaded file.")
         st.dataframe(df.head())
 
+        st.subheader("Data quality snapshot")
         rows, columns = get_shape(df)
-        st.write(f"**Rows:** {rows} &nbsp;&nbsp; **Columns:** {columns}")
+        missing_counts = get_missing_counts(df)
+        missing_total = int(missing_counts.sum())
+        duplicate_count = get_duplicate_count(df)
 
-        st.subheader("Column types")
-        st.dataframe(
-            get_column_types(df).rename("dtype").rename_axis("column").reset_index()
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Rows", f"{rows:,}")
+        col2.metric("Columns", f"{columns:,}")
+        col3.metric(
+            "Missing values",
+            f"{missing_total:,}",
+            help="Total number of empty/null cells across all columns.",
+        )
+        col4.metric(
+            "Duplicate rows",
+            f"{duplicate_count:,}",
+            help="Rows that are exact copies of another row.",
         )
 
-        st.subheader("Missing values")
-        st.dataframe(
-            get_missing_counts(df)
-            .rename("missing_count")
-            .rename_axis("column")
-            .reset_index()
+        render_quality_banner(
+            missing_total,
+            issue_text=(
+                f"{missing_total:,} missing value(s) across "
+                f"{int((missing_counts > 0).sum())} column(s)"
+            ),
+            clean_text="No missing values found.",
+        )
+        render_quality_banner(
+            duplicate_count,
+            issue_text=f"{duplicate_count:,} duplicate row(s)",
+            clean_text="No duplicate rows found.",
         )
 
-        st.subheader("Duplicate rows")
-        st.write(get_duplicate_count(df))
+        with st.expander("See full column details (dtypes & missing counts)"):
+            column_details = (
+                get_column_types(df)
+                .rename("dtype")
+                .to_frame()
+                .join(missing_counts.rename("missing_count"))
+                .rename_axis("column")
+                .reset_index()
+            )
+            st.dataframe(column_details, hide_index=True)
 
-        st.subheader("Chart")
+        st.divider()
+
+        st.subheader("Distribution chart")
         numeric_columns = get_numeric_columns(df)
 
         if not numeric_columns:
             st.info("No numeric columns available to chart.")
         else:
-            selected_column = st.selectbox("Choose a numeric column", numeric_columns)
+            selected_column = st.selectbox(
+                "Choose a numeric column",
+                numeric_columns,
+                help="Pick a numeric column to see how its values are distributed.",
+            )
             values = get_histogram_data(df, selected_column)
 
             if values.empty:
@@ -62,32 +120,17 @@ if uploaded_file is not None:
             else:
                 fig, ax = plt.subplots()
                 ax.hist(values)
+                ax.set_title(f"Distribution of {selected_column}")
                 ax.set_xlabel(selected_column)
                 ax.set_ylabel("Frequency")
                 st.pyplot(fig)
                 plt.close(fig)
+                st.caption(
+                    "This histogram shows how values in the selected column are "
+                    "spread out. Taller bars mean more rows fall in that range."
+                )
 else:
-    st.info("👆 Upload a CSV file to see a preview and profiling summary.")
-
-    st.subheader("What is InsightLite?")
-    st.write(
-        "InsightLite helps you quickly understand a new dataset before diving into "
-        "analysis. Load your data, review its quality, and explore key insights — "
-        "all in one place."
+    st.info(
+        "👆 Upload a CSV file to get started. Once uploaded, you'll see a preview, "
+        "data-quality checks, and a chart of a numeric column."
     )
-
-    st.subheader("How it works")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("### 1. Load data")
-        st.write("Bring in a dataset to get started.")
-
-    with col2:
-        st.markdown("### 2. Review quality")
-        st.write("Check for missing values, types, and anomalies.")
-
-    with col3:
-        st.markdown("### 3. Explore insights")
-        st.write("Summarize trends and patterns at a glance.")
